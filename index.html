@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<!--
+WASM binary visualizer
+Author: Richard Holland
+Date: 6 October 2020
+-->
+<html>
+    <head>
+        <title>WASM Binary Visualizer</title>
+
+<style>
+body {
+    margin: 0;
+    padding: 0;
+}
+
+div#errormsg {
+    margin: 0em .8em 0.8em .8em;
+    padding: 1em;        
+    border-radius: 5px;
+    border: 1px solid red;
+    display: none;
+    color: #b72c00;
+    font-weight:bold;
+    font-family: monospace;
+    padding-left: 1.4em;
+}
+
+
+.clickable:before {
+    content: "👉";
+    color: black;
+    cursor: pointer;
+}
+
+.clickable {
+    cursor: pointer;
+    background: rgb(43 3 244 / 9%);
+    margin: 0.3em;
+    line-height: 1.2em;
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+}
+
+.tainput {
+    width: calc(100vw - 2em);
+    height: 20vh;
+    margin: 1em;
+    box-sizing: border-box;
+    border-radius: 5px;
+    border: 1px solid #9C27B0;
+    padding: 1em;
+}
+.output {
+    background: hsl(0 0% 98% / 1);
+    margin: 0em .8em 0.8em .8em;
+    padding: 1em;
+    border: 1px solid #2196F3;
+    border-radius: 5px;
+    font-family: monospace;
+    overflow-wrap: break-word;
+}
+
+.payloadhex.right {
+    color: rgb(224 5 5);
+}
+
+.left {
+    margin-right: 1em;
+    border-right: 1px solid black;
+    padding-right: 1em;
+    font: small-caption;
+    font-size: small;
+    text-align: right;
+    max-width: 20em;
+    color: #673AB7;
+    font-family: monospace;
+    display: inline-block;
+    width: 20em;
+}
+
+.right:before {
+    content: "0x";
+    font-weight: normal;
+    color: #9e9e9e5e;
+    margin-right: 0.1em;
+}
+.right {
+    display: inline-block;
+    text-align: left;
+    font-family: monospace;
+    font-weight: bold;
+    color: hsl(227deg 100% 46%);
+    vertical-align: top;
+    text-indent: -1.3em;
+    padding-left: 1.3em;
+    word-break: break-word;
+    width: calc(100vw - 35em);
+}
+.fieldtext:before {
+    content: "Field";
+    font-size: smaller;
+    margin-right: 2em;
+    color: orange;
+    position: absolute;
+    left: 2em;
+}
+.typetext:before {
+    content: "Type-code";
+    font-size: smaller;
+    margin-right: 2em;
+    color: orange;
+    position: absolute;
+    left: 2em;
+}
+.payloadtext:before {
+    content: "Field-contents";
+    font-size: smaller;
+    margin-right: 2em;
+    color: orange;
+    position: absolute;
+    left: 2em;
+}
+        .invalid {
+
+        }
+
+        .type {
+
+
+        }
+
+        .field {
+
+
+        }
+
+        .explain {
+
+        }
+
+        .payload {
+
+        }
+
+</style>
+    <script>
+
+
+        var indent_level = 0
+
+        var unknown_detected = false
+
+        function print_error(m, h, out) {
+            out.innerHTML += "<br/><div class='invalid left'>"+h+"</div><div class='invalid right'>" + 
+                m + "</div>"; 
+            return m
+        }
+
+        function print_field(h, s, out) {
+            out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><b>" + s +
+                "</b></div><div class='fieldhex right'>" + h + "</div></div>"
+        }
+        
+        function print_explain(h, msg, out, nnl) {
+            out.innerHTML += (typeof(nnl) == "undefined" ? "" : "<br/>") + 
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'>" + msg + "</div>" +
+                "<div class='explainhex right'>" + h + "</div></div>";
+        }
+
+        function print_payload(h, msg, out) {
+
+            out.innerHTML +=  "<br/>" + 
+                "<div class='payload' style='margin-left: "+indent_level+"em'><div class='payloadtext left'>" + msg + "</div>" +
+                "<div class='payloadhex right'>" + h + "</div></div>";
+
+        }
+
+        function inpele()
+        {
+            return document.getElementsByTagName("textarea")[0]
+        }
+
+        function errorele()
+        {
+            return document.getElementById("errormsg")
+        }
+
+        // these functions help report errors to the user
+        function clear()
+        {
+            inpele().style.background = "white"
+            var m = make_up_link()
+            if (m == "")
+            {
+                errorele().innerHTML = ""
+                errorele().style.display = "none"
+            } else 
+            {
+                errorele().innerHTML = m
+                errorele().style.display = "block"
+                errorele().style.background = "#ffffff"
+                errorele().style.color = "#3F51B5"
+                errorele().style.border = "1px solid blue";
+            }
+        }
+
+        function good()
+        {
+            inpele().style.background = "#e0ffd7"
+            var m = make_up_link()
+            errorele().innerHTML = "Looks like a valid STObject. " + m
+            errorele().style.display = "block"
+            errorele().style.background = "#d7ffdc"
+            errorele().style.color = "#3F51B5"
+            errorele().style.border = "1px solid blue";
+
+        }
+
+        function bad(msg)
+        {
+            inpele().style.background = "#ffd7d7"
+            errorele().style.background = "#ffd7d7"
+            errorele().innerHTML = msg + make_up_link()
+            errorele().style.display = "block"
+            errorele().style.color = "#F44336"
+            errorele().style.border = "1px solid red";
+        }
+
+        function make_up_link()
+        {
+            return ( parse_stack.length > 0 ? "<a class='clickable' onclick='pop_()'>Go up</a>" : "" )
+        }
+
+        function info(msg) 
+        {
+            inpele().style.background = "#fafafa"
+            errorele().style.background = "#fafafa"
+            errorele().innerHTML = msg + make_up_link()
+            errorele().style.display = "block"
+            errorele().style.color = "#3F51B5"
+            errorele().style.border = "1px solid blue";
+        }
+
+        function ugly(msg)
+        {
+            inpele().style.background = "#ffecd7"
+            errorele().style.background = "#ffecd7"
+            errorele().innerHTML = msg + make_up_link()
+            errorele().style.display = "block"
+            errorele().style.color = "#F44336"
+            errorele().style.border = "1px solid red";
+        }
+
+
+        function section_name(i) 
+        {
+            if (i ==  0) return "custom"
+            if (i ==  1) return "typesec"
+            if (i ==  2) return "importsec"
+            if (i ==  3) return "funcsec"
+            if (i ==  4) return "tablesec"
+            if (i ==  5) return "memsec"
+            if (i ==  6) return "globalsec"
+            if (i ==  7) return "exportsec"
+            if (i ==  8) return "startsec"
+            if (i ==  9) return "elemsec"
+            if (i == 10) return "codesec"
+            if (i == 11) return "datasec"
+            return "[[unknown]]"
+        }
+
+        function parse_magic(inp, i, out)
+        {
+            var mn = inp.substring(i, i + 8)
+            console.log("magic: " + mn)
+            if (mn != '0061736D')
+                return print_error(mn, "Invalid magic number", out)
+            print_field(mn, "Magic number", out)
+            return i + 8 
+        }
+
+        function parse_version(inp, i, out)
+        {
+            var ver = inp.substring(i, i + 8)
+            print_field(ver, "Version", out)
+            return i + 8
+        }
+
+
+        function parse_leb128(inp, i, out)
+        {
+            var val = 0
+            while (i < inp.length)
+            {
+                console.log('l-' + inp.substring(i, i+2))
+                var b = parseInt(inp.substring(i, i + 2), 16)
+                val += b & 0x7F
+                i += 2
+                if (b & 0x80)
+                {
+                    val <<= 7
+                    continue
+                }
+                console.log("leb128 returning val " + val + " and i = " + i)
+                return [i, val]
+            }
+            return [-1, "eoi while trying to parse leb128"]
+        }
+                                                  
+        function val_type(x)
+        {
+            if (x == 0x7f) return "i32"
+            if (x == 0x7E) return "i64"
+            if (x == 0x7D) return "f32"
+            if (x == 0x7C) return "f64"
+            return "[[unknown]]"
+        }
+
+        function parse_(inp, i, out)
+        {
+            
+        }
+
+        function parse_result_type(inp, i, out, prefix = "")
+        {
+            if (i+2 > inp.length)
+                return "eoi while parsing resulttype";
+
+            var type_count = 0;
+            var oldi = i;
+
+            [i, type_count] = parse_leb128(inp, i, out); if (typeof(i) == "string") return i;
+
+            print_explain(inp.substring(oldi, i), prefix + " count " + type_count, out)
+
+            indent_level += 2
+            while (i < inp.length && type_count--)
+            {
+                var t = parseInt(inp[i] + inp[i+1], 16)
+                print_payload(inp[i] + inp[i+1], val_type(t), out)
+                i+=2
+            }
+            indent_level -=2 
+            return i
+        }
+
+
+        function parse_functype(inp, i, out, nam="")
+        {
+            if (i+2 > inp.length)
+                return "eoi while parsing functype"
+
+            if (inp[i] != '6' || inp[i+1] != '0')
+            {
+                print_error(inp[i] + inp[i+1], "expecting functype", out)
+                return "expecting functype but other bytes found"
+            }
+
+            print_field(inp[i] + inp[i+1], "Functype" + (nam == "" ? "" : " ") +  nam, out)
+            i+=2
+
+            // parse two result types
+            i = parse_result_type(inp, i, out, "Parameter")
+            i = parse_result_type(inp, i, out, "Return")
+
+            return i
+        }
+
+        function parse_name(inp, i, out)
+        {
+            var bc = 0;
+            [i, bc] = parse_leb128(inp, i, out); if (typeof(i) == "string") return [i, ""];
+            var nam = ""
+            var bytes_left = bc;
+            while (i+2 < inp.length && bytes_left-- > 0)
+            {
+                nam += String.fromCharCode(parseInt(inp[i] + inp[i+1], 16))
+                i+=2
+            }
+            return [i, nam]
+        }
+
+        function parse_import(inp, i, out)
+        {
+            var module_name = "";
+            var oldi = i;
+            var nam = "";
+            [i, nam] = parse_name(inp, i, out);
+            if (typeof(i) == "string")
+            {
+                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                return "expected byte vector"
+            }
+            print_payload(inp.substring(oldi, i), "Module name: " + nam, out)
+        
+            oldi = i;
+            nam = "";
+            [i, nam] = parse_name(inp, i, out);
+            if (typeof(i) == "string")
+            {
+                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                return "expected byte vector"
+            }
+            print_payload(inp.substring(oldi, i), "Func name: " + nam, out)
+          
+            if (i+2 > inp.length)
+                return "eoi when expecting import description"
+            
+            var idd = parseInt(inp[i] + inp[i+1], 16)
+            if (idd > 3 || idd < 0) 
+            {
+                print_error(inp[i] + inp[i+1], "expected import desc between 0x00 ... 0x03", out)
+                return "invalid import desc"
+            }
+
+            i+=2
+
+            if (idd == 0) //typeidx
+            {
+                var typeidx = 0
+                old_i = i;
+                [i, typeidx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                print_payload(inp.substring(old_i, i), "Type index: " + typeidx, out)
+                return i
+            }   
+
+            print_error("???", "not yet implemented", out); // todo implement 
+            return "not yet implemented"
+        }
+
+        function do_run(inp, out)
+        {
+            var i = 0
+            i = parse_magic(inp, i, out);    if (typeof(i) == "string") return i;
+            i = parse_version(inp, i, out);  if (typeof(i) == "string") return i;
+            while (i < inp.length)
+            {
+                // section loop
+                var section_id = (inp[i] << 4) + inp[i+1]
+                print_field(inp[i] + inp[i+1], "Section " + section_id + " - " + section_name(section_id), out)
+                i += 2
+
+                var section_len = 0;
+                var old_i = i;
+                [i, section_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                print_explain(inp.substring(old_i, i), "section byte length " + section_len, out)
+                
+                if (section_id == 0)
+                {
+                    // custom section
+                    print_field(inp.substring(i, i + section_len*2), "Custom section (usless) data", out)
+                    i += section_len
+                    continue
+                }
+
+                // every section except custom is a vector
+                var vector_len = 0
+                old_i = i;
+                [i, vector_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                print_explain(inp.substring(old_i, i), "vector of " + vector_len + " entries", out)
+                
+
+                if (section_id == 1)
+                {
+                    indent_level += 2
+                    var func_count = 0
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        i = parse_functype(inp, i, out, ""+(func_count++))
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out);
+                            break
+                        }
+
+                    }
+                    
+                    indent_level -=2
+                    continue
+                }
+
+                if (section_id == 2)
+                {   
+                    indent_level += 2
+                    var import_count = 0 
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        // first thing we get in an import is a module name
+                        i = parse_import(inp, i, out, ""+(import_count++))
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out);
+                            break
+                        }
+
+                    }
+
+                    indent_level -= 2 
+                    continue
+                }
+               
+
+                if (section_id == 3)
+                {
+                    indent_level += 2
+                    var functions = 0;
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        var idx = 0
+                        old_i = i;
+                        [i, idx] = parse_leb128(inp, i, out);
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out)
+                            break
+                        }
+
+                        print_payload(inp.substring(old_i, i), "Function " + functions++ + ": type index " + idx, out)
+
+                    }
+                    indent_level -= 2
+                    continue
+                }
+
+                if (section_id == 4)
+                {
+                    indent_level += 2
+                    var tables = 0;
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        if (i+6 > inp.length)
+                        {
+                            print_error("?", "eoi while expecting table type", out)
+                            break
+                        }
+
+                        if (inp[i] != '7' || inp[i+1] != '0')
+                        {
+                            print_error(inp[i] + inp[i+1], "expected 0x70 for table type", out)
+                            break
+                        }
+
+                        print_field(inp[i] + inp[i+1], "Table " + (tables++), out)
+
+                        i += 2
+
+                        // parse limits
+                        var limit_type = parseInt(inp[i] + inp[i+1], 16)
+                        if (limit_type < 0 || limit_type > 1)
+                        {
+                            print_error(inp[i] + inp[i+1], "expecting 0x01 or 0x02 specifying limit type", out)
+                            break
+                        }
+
+                        print_field(inp[i] + inp[i+1], "Limit type", out)
+
+                        i += 2
+
+                        indent_level += 2
+
+                        // parse limit 1
+                        var limit_min = 0
+                        old_i = i;
+                        [i, limit_min] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                        print_payload(inp.substring(old_i, i), "min " + limit_min + " entries", out)
+               
+                        i += 2
+                        // parse limit 2
+                        if (limit_type == 1)
+                        {
+                            var limit_max = 0
+                            old_i = i;
+                            [i, limit_max] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                            print_payload(inp.substring(old_i, i), "max " + limit_max + " entries", out)
+                            i += 2
+                        }
+                        indent_level -=2 
+                    }
+
+                    indent_level -= 2
+                    continue
+                }
+                
+                break
+            }
+
+            print_payload(inp.substring(i, inp.length), "remaining unparsed bytes", out)
+        }
+
+        function run() {
+
+            const out = document.getElementsByClassName("output")[0]
+            out.innerHTML = ""
+
+            indent_level = 0
+
+            var inp = inpele().value
+
+            // do an analysis to see if it's actually base64
+
+            if (inp == "") 
+                return clear()
+
+            const inp_nospace = inp.replace(/\s/gi, '').toUpperCase()
+
+
+            if (!inp_nospace.match(/^[A-F0-9]+$/))
+            {
+                return bad("Not valid hex")
+            }
+
+            do_run(inp_nospace, out)
+
+        }
+    </script>
+    </head>
+    <body>
+        <textarea onchange="run(0, false)" rows="5" class="tainput" placeholder="Paste your WASM HEX here then click outside the box to decode."></textarea>
+        <div id="errormsg"></div>
+    <div class="output">
+    </div>
+    </body>
+</html>
