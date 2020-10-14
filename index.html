@@ -514,6 +514,37 @@ div#errormsg {
             return "eoi while parsing instructions"
         }
 
+        function parse_data(inp, i, out, enam)
+        {
+            print_field("", "Datasec " + enam, out)
+            var memidx = 0
+            var old_i = i;
+            [i, memidx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+            print_explain(inp.substring(old_i, i),  "memory index: " + memidx, out)
+
+            indent_level += 2
+            i = parse_instr(inp, i, out, "Offset = ")
+            if (typeof(i) == "string")
+                return i
+
+            indent_level -= 2
+
+            print_field("", "Initalize", out)
+            var len = 0
+            var old_i = i;
+            [i, len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+            print_explain(inp.substring(old_i, i),  "len " + len, out)
+            indent_level += 2
+            
+            if (i + len*2 > inp.length)
+                return "eoi while parsing datasec"
+
+            print_payload(inp.substring(i, i + len*2), "data", out)
+
+            indent_level -= 2
+            return i + len*2
+        }
+
         function parse_function(inp, i, out, enam)
         {
 
@@ -822,6 +853,26 @@ div#errormsg {
                     continue
                 }
                 
+                if (section_id == 11)
+                {
+                    indent_level += 2
+                    var data_count = 0 
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        i = parse_data(inp, i, out, ""+(data_count++))
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out);
+                            break
+                        }
+
+                    }
+
+                    indent_level -= 2 
+                    continue
+
+                }
+
                 break
             }
 
