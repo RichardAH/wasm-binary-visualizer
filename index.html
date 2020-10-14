@@ -429,6 +429,55 @@ div#errormsg {
             return "not yet implemented"
         }
 
+        function instr(x)
+        {
+            
+        }
+
+        function parse_instr(inp, i, out, prefix = "")
+        {
+            var starti = i;
+            for ( ; i + 2 < inp.length; ++i )
+            {
+                if (inp[i] == '0' && inp[i+1] == 'B')
+                {
+                    print_payload(inp.substring(starti, i), prefix + "instr", out)
+                    print_payload(inp[i] + inp[i+1], "[End]", out)
+                    return i+2
+                }
+            }
+            return "eoi while parsing instructions"
+        }
+
+        function parse_global(inp, i, out, nam)
+        {
+            if (i + 4 > inp.length)
+                return "eoi while trying to read global"
+
+            var gtype = parseInt(inp[i] + inp[i+1], 16)
+            if (gtype < 0x7C || gtype > 0x7F)
+            {
+                print_error(inp[i] + inp[i+1], "expecting type 0x7C - 0x7F", out)
+                return "invalid type"
+            }
+
+            print_field(inp[i] + inp[i+1], "Global "+nam, out)
+            i+=2 
+
+            var mut = parseInt(inp[i] + inp[i+1], 16)
+            if (mut < 0x00 || mut > 0x01)
+            {
+                print_error(inp[i] + inp[i+1], "expecting mutation type 0x01 or 0x00", out)
+                return "invalid mutation type"
+            }
+            print_explain(inp[i] + inp[i+1], ( mut == 0 ? "const" : "var" ), out)
+            i+=2 
+            indent_level += 2
+            i = parse_instr(inp, i, out, "Expr = ")
+            indent_level -=2
+            return i
+        }
+
         function do_run(inp, out)
         {
             var i = 0
@@ -523,27 +572,31 @@ div#errormsg {
                     continue
                 }
 
-                if (section_id == 4)
+                if (section_id == 4 || section_id == 5)
                 {
+                    var _type = ( section_id == 4 ? "table" : "mem" );
                     indent_level += 2
                     var tables = 0;
                     while (i < inp.length && vector_len-- > 0)
                     {
                         if (i+6 > inp.length)
                         {
-                            print_error("?", "eoi while expecting table type", out)
+                            print_error("?", "eoi while expecting " + _type + " type", out)
                             break
                         }
 
-                        if (inp[i] != '7' || inp[i+1] != '0')
+                        if (section_id == 4)
                         {
-                            print_error(inp[i] + inp[i+1], "expected 0x70 for table type", out)
-                            break
+                            if (inp[i] != '7' || inp[i+1] != '0')
+                            {
+                                print_error(inp[i] + inp[i+1], "expected 0x70 for table type", out)
+                                break
+                            }
+
+                            print_field(inp[i] + inp[i+1], "Table " + (tables++), out)
+
+                            i += 2
                         }
-
-                        print_field(inp[i] + inp[i+1], "Table " + (tables++), out)
-
-                        i += 2
 
                         // parse limits
                         var limit_type = parseInt(inp[i] + inp[i+1], 16)
@@ -563,21 +616,39 @@ div#errormsg {
                         var limit_min = 0
                         old_i = i;
                         [i, limit_min] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                        print_payload(inp.substring(old_i, i), "min " + limit_min + " entries", out)
+                        print_payload(inp.substring(old_i, i), "min: " + limit_min, out)
                
-                        i += 2
                         // parse limit 2
                         if (limit_type == 1)
                         {
                             var limit_max = 0
                             old_i = i;
                             [i, limit_max] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                            print_payload(inp.substring(old_i, i), "max " + limit_max + " entries", out)
-                            i += 2
+                            print_payload(inp.substring(old_i, i), "max: " + limit_max, out)
                         }
                         indent_level -=2 
                     }
 
+                    indent_level -= 2
+                    continue
+                }
+                
+                if (section_id == 6)
+                {
+                    indent_level += 2
+                    var globals = 0;
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+
+                        i = parse_global(inp, i, out, globals++)
+
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out)
+                            break
+                        }
+
+                    }
                     indent_level -= 2
                     continue
                 }
