@@ -156,6 +156,10 @@ div#errormsg {
 
         var unknown_detected = false
 
+        function toggle_section(x) {
+            const e = x.parentElement.children[1]; e.style.display = (e.style.display == "none" ? "block" : "none");
+        }
+
         function print_error(m, h, out) {
             out.innerHTML += "<br/><div class='invalid left'>"+h+"</div><div class='invalid right'>" + 
                 m + "</div>"; 
@@ -490,24 +494,238 @@ div#errormsg {
             return "not yet implemented"
         }
 
-        function instr(x)
+        function parse_instr_verbose(inp, i, out, endi, collapsename = "")
         {
-            
+         //   out.innerHTML += "<div>" // make this collapsable using collapse name
+            for (; i < endi; )
+            {
+                var opcode = parseInt(inp[i] + inp[i+1], 16)
+                var h = inp[i] + inp[i+1]
+
+                // end
+                if (opcode == 0x00)
+                {
+                    print_payload(h, "unreachable", out)
+                    i+=2
+                    continue
+                }
+
+                // nop
+                if (opcode == 0x01)
+                {
+                    print_payload(h, "nop", out)
+                    i+=2
+                    continue
+                }
+
+                // block instructions
+                if (opcode >= 0x02 && opcode <= 0x04)
+                {
+                    var block_type = "[[unknown blocktype]]"
+                    if (opcode == 0x02) block_type == "block"
+                    if (opcode == 0x03) block_type == "loop"
+                    if (opcode == 0x04) block_type == "if"
+                   
+                    print_payload(h, opcode, out)
+                    
+                    i += 2
+                    if (i > inp.length)
+                        return "eoi while parsing block operands"
+
+                    // now infer block return type
+                    var ret = parseInt(inp[i] + inp[i+1], 16)
+                    var ret_type = "[[unknown return type]]"
+                    var typeidx = -1
+                    var oldi = i
+                    if (ret == 0x40) return_type = "void"
+                    else if (ret >= 0x7C && ret <= 0x7F) return_type = val_type(ret)
+                    else {
+                        [i, typeidx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                        ret_type =  "Type index: " + typeidx
+                    }
+                    if (typeidx == -1) i+=2
+                    print_payload(inp.substring(oldi, i), ret_type, out)
+
+                    indent_level += 2
+                    i = parse_instr_verbose(inp, i, out, endi)
+                    if (typeof(i) == "string") return i;
+                    indent_level -= 2
+
+                    if (i + 2 > inp.length && parseInt(inp[i] + inp[i+1], 16) == 0x50)
+                    {
+                        print_payload(inp[i] + inp[i+1], "else", out)
+                        i+=2
+                        indent_level += 2
+                        i = parse_instr_verbose(inp, i, out, endi)
+                        if (typeof(i) == "string") return i;
+                        indent_level -= 2
+                    }
+                    continue
+                }
+
+                // branch instructions and return
+                if (opcode == 0x0C || opcode == 0x0D || opcode == 0x0E || opcode == 0x0F)
+                {
+                    print_payload(inp[i] + inp[i+1], "Branch " + ( opcode == 0x0C ? "unconditional" : 
+                        ( opcode == 0x0D ? "conditional" : ( opcode == 0x0E ? "table" : "return" ) ) ), out)
+                    i+=2
+                    // return                    
+                    if (opcode == 0x0F) continue
+
+                    // br and br_if
+                    if (opcode == 0x0C || opcode == 0x0D)
+                    {
+                        var idx = 0
+                        var old_i = i;
+                        [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                        print_payload(inp.substring(old_i, i), "to index: " + typeidx, out)
+                        continue
+                    }
+
+                    // br table
+                    var vec = 0
+                    var old_i = i;
+                    [i, vec] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                    print_payload(inp.subsring(old_i, i), "table len " + vec, out)
+                    indent_level += 2
+                    var count = 0
+                    while (i < inp.length && vec-- > 0)
+                    {
+                        var idx = 0
+                        var old_i = i;
+                        [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                        print_payload(inp.substring(old_i, i), (count++)+" -> idx " + idx, out)
+                    }
+                    indent_level -= 2
+
+                    continue
+                }
+
+                // call instructions  
+                if (opcode == 0x10 || opcode == 0x11)
+                {
+                        var indirect = (opcode == 0x11)
+                        print_payload(inp[i], inp[i+1], "Call" + (indirect ? " indirect" : ""), out)
+                        i+=2
+                        indent_level += 2
+                        var idx = 0
+                        var old_i = i;
+                        [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                        print_payload(inp.substring(old_i, i),  "Function " + idx, out)
+                        if (indirect) i+= 2
+                        indent_level -= 2
+                        continue
+                }
+
+                //Parametric Instructions
+                if (opcode == 0x1A || opcode == 0x1B)
+                {
+                    print_payload(inp[i], inp[i+1], (opcode == 0x1B ? "Select" : "Drop"), out)
+                    i+=2
+                    continue
+                }
+
+                //Variable Instructions
+                if (opcode >= 0x20 && opcode <= 0x24)
+                {
+                    var i_type = "[[unknown]]"
+                    if (opcode == 0x20) i_type = "Local get"
+                    if (opcode == 0x21) i_type = "Local set"
+                    if (opcode == 0x22) i_type = "Local tee"
+                    if (opcode == 0x23) i_type = "Global get"
+                    if (opcode == 0x24) i_type = "Global set"
+                    print_payload(inp[i] + inp[i+1], i_type, out)
+                    i+=2
+                    indent_level += 2
+                    var idx = 0
+                    var old_i = i;
+                    [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                    print_payload(inp.substring(old_i, i),  "Index: " + idx, out)
+                    indent_level -= 2
+                    continue
+                }
+
+
+                // mem instr
+                if (opcode >= 0x28 && opcode <= 0x40)
+                {
+                    var i_type = "[[unknown]]"
+                    if (opcode == 0x28) i_type = "Load mem into i32"
+                    if (opcode == 0x29) i_type = "Load mem into i64"
+                    if (opcode == 0x2A) i_type = "Load mem into f32"
+                    if (opcode == 0x2B) i_type = "Load mem into f64"
+                    if (opcode == 0x2C) i_type = "Load mem s8 into i32"
+                    if (opcode == 0x2D) i_type = "Load mem u8 into i32"
+                    if (opcode == 0x2E) i_type = "Load mem s16 into i32"
+                    if (opcode == 0x2F) i_type = "Load mem u16 into i32"
+
+                    if (opcode == 0x30) i_type = "Load mem s8 into i64"
+                    if (opcode == 0x31) i_type = "Load mem u8 into i64"
+                    if (opcode == 0x32) i_type = "Load mem s16 into i64"
+                    if (opcode == 0x33) i_type = "Load mem u16 into i64"
+                    if (opcode == 0x34) i_type = "Load mem s32 into i64"
+                    if (opcode == 0x35) i_type = "Load mem u32 into i64"
+                    
+                    if (opcode == 0x36) i_type = "Store i32 into mem"
+                    if (opcode == 0x37) i_type = "Store i64 into mem"
+                    if (opcode == 0x38) i_type = "Store f32 into mem"
+                    if (opcode == 0x39) i_type = "Store f64 into mem"
+
+                    if (opcode == 0x3A) i_type = "Store i32 into mem i8"
+                    if (opcode == 0x3B) i_type = "Store i32 into mem i16"
+                    if (opcode == 0x3C) i_type = "Store i64 into mem i8"
+                    if (opcode == 0x3D) i_type = "Store i64 into mem i16"
+                    if (opcode == 0x3E) i_type = "Store i64 into mem i32"
+
+                    if (opcode == 0x3F) i_type = "Get memory size"
+                    if (opcode == 0x40) i_type = "Grow memory"
+
+                    print_payload(inp[i] + inp[i+1], i_type, out)
+                    i+=2
+                    if (opcode == 0x3F || opcode == 0x40)
+                    {
+                        indent_level += 2
+                        print_payload(inp[i] + inp[i+1], "[reserved]")
+                        i+=2
+                        indent_level -= 2
+                        continue
+                    }
+
+                    indent_level += 2
+                    var align = 0
+                    var old_i = i;
+                    [i, align] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                    print_payload(inp.substring(old_i, i),  "Align: " + align, out)
+
+                    var offset = 0
+                    old_i = i;
+                    [i, offset] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                    print_payload(inp.substring(old_i, i),  "Offset: " + offset, out)
+                    indent_level -=2
+                    continue
+
+                }
+
+                print_payload(inp[i] + inp[i+1], "not yet implemented", out)
+                i+=2
+
+            }
+           // out.innerHTML += "</div>"
         }
+        
 
         function parse_instr(inp, i, out, prefix = "", minlen = false)
         {
             var starti = i;
-            // console.log("parse_instr starti: " + i + ", inlen: " + minlen)
             for ( ; i + 2 < inp.length; i+=2 )
             {
-                console.log("minlen: " + minlen + ", i: " + i + ", i+2 >= minlen: " + (i+2 >= minlen))
                 if (!minlen && inp[i] == '0' && inp[i+1] == 'B' || minlen && i+2 >= minlen)
                 {
                     var instr = inp.substring(starti, i)
                     if (instr != "")
                         print_payload(instr, prefix + "instr", out)
                     print_payload(inp[i] + inp[i+1], "[End]", out)
+       //             parse_instr_verbose(inp, starti, out, i)
                     return i+2
                 }
             }
