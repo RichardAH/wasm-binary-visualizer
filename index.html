@@ -303,15 +303,16 @@ div#errormsg {
         function parse_leb128(inp, i, out)
         {
             var val = 0
+            var shift = 0
             while (i < inp.length)
             {
                 console.log('l-' + inp.substring(i, i+2))
                 var b = parseInt(inp.substring(i, i + 2), 16)
-                val += b & 0x7F
+                val += (b & 0x7F) << shift
                 i += 2
                 if (b & 0x80)
                 {
-                    val <<= 7
+                    shift += 7
                     continue
                 }
                 console.log("leb128 returning val " + val + " and i = " + i)
@@ -494,14 +495,18 @@ div#errormsg {
             
         }
 
-        function parse_instr(inp, i, out, prefix = "")
+        function parse_instr(inp, i, out, prefix = "", minlen = false)
         {
             var starti = i;
+            // console.log("parse_instr starti: " + i + ", inlen: " + minlen)
             for ( ; i + 2 < inp.length; i+=2 )
             {
-                if (inp[i] == '0' && inp[i+1] == 'B')
+                console.log("minlen: " + minlen + ", i: " + i + ", i+2 >= minlen: " + (i+2 >= minlen))
+                if (!minlen && inp[i] == '0' && inp[i+1] == 'B' || minlen && i+2 >= minlen)
                 {
-                    print_payload(inp.substring(starti, i), prefix + "instr", out)
+                    var instr = inp.substring(starti, i)
+                    if (instr != "")
+                        print_payload(instr, prefix + "instr", out)
                     print_payload(inp[i] + inp[i+1], "[End]", out)
                     return i+2
                 }
@@ -511,17 +516,20 @@ div#errormsg {
 
         function parse_function(inp, i, out, enam)
         {
+
+                print_field("", "Function " + enam, out)
                 var len = 0
-                old_i = i;
+                var old_i = i;
                 [i, len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_field(inp.substring(old_i, i), "Function " + enam + " len: " + len, out)
-                
-                indent_level += 2
+                print_explain(inp.substring(old_i, i),  "byte len: " + len, out)
+            
+                var endi = i + len*2;
+
                 
                 var local_len = 0
                 old_i = i;
                 [i, local_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_field(inp.substring(old_i, i), "Locals: " + local_len, out)
+                print_explain(inp.substring(old_i, i), "Locals: " + local_len, out)
 
                 indent_level += 2
                 var local_count = 0
@@ -553,11 +561,10 @@ div#errormsg {
                     indent_level -= 2
                 }
 
-                indent_level -= 2
 
                 // locals parsed now do expr
-
-                i = parse_instr(inp, i, out, "")
+                print_field("", "Function instructions", out)
+                i = parse_instr(inp, i, out, "", endi)
                 indent_level -= 2
                 return i
             
