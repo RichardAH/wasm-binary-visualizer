@@ -61,6 +61,11 @@ div#errormsg {
     overflow-wrap: break-word;
 }
 
+.ascii {
+    font-style: italic;
+    font-weight: normal !important;
+    font-color:purple !import;
+}
 .payloadhex.right {
     color: rgb(224 5 5);
 }
@@ -85,7 +90,7 @@ div#errormsg {
     color: #9e9e9e5e;
     margin-right: 0.1em;
 }
-.right {
+.right, .rightempty {
     display: inline-block;
     text-align: left;
     font-family: monospace;
@@ -159,13 +164,20 @@ div#errormsg {
 
         function print_field(h, s, out) {
             out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><b>" + s +
-                "</b></div><div class='fieldhex right'>" + h + "</div></div>"
+                "</b></div><div class='fieldhex right"+(h=="" ? "empty" : "")+"'>" + h + "</div></div>"
         }
         
+        function print_ascii(h, msg, out)
+        {
+            out.innerHTML += "<br/>" + 
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'>" + msg + "</div>" +
+                "<div class='explainhex rightempty ascii"+(h==""?'2':'')+"'>" + h + "</div></div>";
+        }
+
         function print_explain(h, msg, out, nnl) {
             out.innerHTML += (typeof(nnl) == "undefined" ? "" : "<br/>") + 
                 "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'>" + msg + "</div>" +
-                "<div class='explainhex right'>" + h + "</div></div>";
+                "<div class='explainhex right"+(h==""?'2':'')+"'>" + h + "</div></div>";
         }
 
         function print_payload(h, msg, out) {
@@ -317,6 +329,15 @@ div#errormsg {
             return "[[unknown]]"
         }
 
+        function idx_type(x)
+        {
+            if (x == 0x00) return "function"
+            if (x == 0x01) return "table"
+            if (x == 0x02) return "memory"
+            if (x == 0x03) return "global"
+
+        }
+
         function parse_(inp, i, out)
         {
             
@@ -381,6 +402,45 @@ div#errormsg {
             return [i, nam]
         }
 
+        function parse_export(inp, i, out, enam)
+        {
+        
+            var oldi = i;
+            var nam = "";
+            [i, nam] = parse_name(inp, i, out);
+            if (typeof(i) == "string")
+            {
+                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                return "expected byte vector"
+            }
+            
+            print_field("", "Export " + enam, out)
+            indent_level += 2
+            print_payload(inp.substring(oldi, i), "Name: `" + nam + "`", out)
+          
+            if (i+2 > inp.length)
+                return "eoi when expecting exportt description"
+            
+            var idd = parseInt(inp[i] + inp[i+1], 16)
+            if (idd > 3 || idd < 0) 
+            {
+                print_error(inp[i] + inp[i+1], "expected export desc between 0x00 ... 0x03", out)
+                return "invalid export desc"
+            }
+    
+            print_payload(inp[i] + inp[i+1], "Type: " + idx_type(idd) , out) 
+
+            i+=2
+
+            var idx = 0
+            old_i = i;
+            [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+            print_payload(inp.substring(old_i, i), "Index: " + idx, out)
+            indent_level -= 2 
+            return i
+
+        }
+
         function parse_import(inp, i, out)
         {
             var module_name = "";
@@ -392,7 +452,7 @@ div#errormsg {
                 print_error(inp.substring(oldi, i), "expected byte vector", out)
                 return "expected byte vector"
             }
-            print_payload(inp.substring(oldi, i), "Module name: " + nam, out)
+            print_payload(inp.substring(oldi, i), "Module name: `" + nam + "`", out)
         
             oldi = i;
             nam = "";
@@ -402,7 +462,7 @@ div#errormsg {
                 print_error(inp.substring(oldi, i), "expected byte vector", out)
                 return "expected byte vector"
             }
-            print_payload(inp.substring(oldi, i), "Func name: " + nam, out)
+            print_payload(inp.substring(oldi, i), "Func name: `" + nam + "`", out)
           
             if (i+2 > inp.length)
                 return "eoi when expecting import description"
@@ -437,7 +497,7 @@ div#errormsg {
         function parse_instr(inp, i, out, prefix = "")
         {
             var starti = i;
-            for ( ; i + 2 < inp.length; ++i )
+            for ( ; i + 2 < inp.length; i+=2 )
             {
                 if (inp[i] == '0' && inp[i+1] == 'B')
                 {
@@ -447,6 +507,60 @@ div#errormsg {
                 }
             }
             return "eoi while parsing instructions"
+        }
+
+        function parse_function(inp, i, out, enam)
+        {
+                var len = 0
+                old_i = i;
+                [i, len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                print_field(inp.substring(old_i, i), "Function " + enam + " len: " + len, out)
+                
+                indent_level += 2
+                
+                var local_len = 0
+                old_i = i;
+                [i, local_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                print_field(inp.substring(old_i, i), "Locals: " + local_len, out)
+
+                indent_level += 2
+                var local_count = 0
+                while (i < inp.length && local_len-- > 0)
+                {
+
+                    print_field("", "Local " + (local_count++), out)
+                    indent_level += 2
+                    
+                    var array_len = 0
+                    old_i = i;
+                    [i, array_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
+                    print_payload(inp.substring(old_i, i), "Element count: " +  array_len, out)
+
+                    if (i + 2 > inp.length)
+                    {
+                        print_error("?", "eoi while parsing local type", out)
+                        return "eoi while parsing local type"
+                    }
+                    var local_type = parseInt(inp[i] + inp[i+1], 16)
+                    if (local_type < 0x7C || local_type > 0x7F)
+                    {
+                        print_error(inp[i] + inp[i+1], "invalid local type, expecting 0x7C... 0x7F", out)
+                        return "invalid local type, expecting 0x7C... 0x7F"
+                    }
+                    print_payload(inp[i] + inp[i+1], "Local Type: " + val_type(local_type), out)
+                    i+=2
+
+                    indent_level -= 2
+                }
+
+                indent_level -= 2
+
+                // locals parsed now do expr
+
+                i = parse_instr(inp, i, out, "")
+                indent_level -= 2
+                return i
+            
         }
 
         function parse_global(inp, i, out, nam)
@@ -486,7 +600,7 @@ div#errormsg {
             while (i < inp.length)
             {
                 // section loop
-                var section_id = (inp[i] << 4) + inp[i+1]
+                var section_id = parseInt(inp[i] + inp[i+1], 16) 
                 print_field(inp[i] + inp[i+1], "Section " + section_id + " - " + section_name(section_id), out)
                 i += 2
 
@@ -498,8 +612,17 @@ div#errormsg {
                 if (section_id == 0)
                 {
                     // custom section
-                    print_field(inp.substring(i, i + section_len*2), "Custom section (usless) data", out)
-                    i += section_len
+                    if (i + section_len*2 > inp.length)
+                    {
+                        print_error("?", "eoi while trying to read custom section", out)
+                        break
+                    }
+                    print_payload(inp.substring(i, i + section_len*2), "Custom section (usless) data", out)
+                    var ascii = ""
+                    for (var j = i; j < i + section_len*2; j+=2)
+                        ascii += String.fromCharCode(parseInt(inp[j] + inp[j+1], 16))
+                    print_ascii(  ascii, "(ascii)", out)
+                    i += section_len*2
                     continue
                 }
 
@@ -653,10 +776,51 @@ div#errormsg {
                     continue
                 }
                 
+                if (section_id == 7)
+                {   
+                    indent_level += 2
+                    var export_count = 0 
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        // first thing we get in an import is a module name
+                        i = parse_export(inp, i, out, ""+(export_count++))
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out);
+                            break
+                        }
+
+                    }
+
+                    indent_level -= 2 
+                    continue
+                }
+
+                if (section_id == 10)
+                {   
+                    indent_level += 2
+                    var function_count = 0 
+                    while (i < inp.length && vector_len-- > 0)
+                    {
+                        i = parse_function(inp, i, out, ""+(function_count++))
+                        if (typeof(i) == "string")
+                        {
+                            print_error("?", i, out);
+                            break
+                        }
+
+                    }
+
+                    indent_level -= 2 
+                    continue
+                }
+                
                 break
             }
 
-            print_payload(inp.substring(i, inp.length), "remaining unparsed bytes", out)
+            var unparsed = inp.substring(i, inp.length)
+            if (unparsed != "")
+              print_payload(inp.substring(i, inp.length), "remaining unparsed bytes", out)
         }
 
         function run() {
