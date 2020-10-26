@@ -479,6 +479,10 @@ div#errormsg {
                 return "invalid import desc"
             }
 
+            print_payload(inp.substring(i, i+2), "Import type: " + ( idd == 0x00 ? "Func" :
+                                                                   ( idd == 0x01 ? "Table" : 
+                                                                   ( idd == 0x02 ? "Mem" :
+                                                                   ( idd == 0x03 ? "Global" : "Unknown" )))), out);
             i+=2
 
             if (idd == 0) //typeidx
@@ -722,10 +726,10 @@ div#errormsg {
                 if (!minlen && inp[i] == '0' && inp[i+1] == 'B' || minlen && i+2 >= minlen)
                 {
                     var instr = inp.substring(starti, i)
-                    if (instr != "")
-                        print_payload(instr, prefix + "instr", out)
-                    print_payload(inp[i] + inp[i+1], "[End]", out)
-       //             parse_instr_verbose(inp, starti, out, i)
+       //             if (instr != "")
+       //                 print_payload(instr, prefix + "instr", out)
+       //             print_payload(inp[i] + inp[i+1], "[End]", out)
+                    parse_instr_verbose(inp, starti, out, i)
                     return i+2
                 }
             }
