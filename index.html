@@ -26,6 +26,9 @@ div#errormsg {
     padding-left: 1.4em;
 }
 
+small {
+    margin-right:0.5em;
+}
 
 .clickable:before {
     content: "👉";
@@ -160,34 +163,34 @@ div#errormsg {
             const e = x.parentElement.children[1]; e.style.display = (e.style.display == "none" ? "block" : "none");
         }
 
-        function print_error(m, h, out) {
-            out.innerHTML += "<br/><div class='invalid left'>"+h+"</div><div class='invalid right'>" + 
+        function print_error(m, h, out, offset){
+            out.innerHTML += "<br/><div class='invalid left'><small>"+offset+"</small>"+h+"</div><div class='invalid right'>" + 
                 m + "</div>"; 
             return m
         }
 
-        function print_field(h, s, out) {
-            out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><b>" + s +
+        function print_field(h, s, out, offset){
+            out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><small>"+offset+"</small><b>" + s +
                 "</b></div><div class='fieldhex right"+(h=="" ? "empty" : "")+"'>" + h + "</div></div>"
         }
         
-        function print_ascii(h, msg, out)
+        function print_ascii(h, msg, out, offset)
         {
             out.innerHTML += "<br/>" + 
-                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'>" + msg + "</div>" +
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+offset+"</small>" + msg + "</div>" +
                 "<div class='explainhex rightempty ascii"+(h==""?'2':'')+"'>" + h + "</div></div>";
         }
 
-        function print_explain(h, msg, out, nnl) {
-            out.innerHTML += (typeof(nnl) == "undefined" ? "" : "<br/>") + 
-                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'>" + msg + "</div>" +
+        function print_explain(h, msg, out, offset){
+            out.innerHTML += 
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+offset+"</small>" + msg + "</div>" +
                 "<div class='explainhex right"+(h==""?'2':'')+"'>" + h + "</div></div>";
         }
 
-        function print_payload(h, msg, out) {
+        function print_payload(h, msg, out, offset){
 
             out.innerHTML +=  "<br/>" + 
-                "<div class='payload' style='margin-left: "+indent_level+"em'><div class='payloadtext left'>" + msg + "</div>" +
+                "<div class='payload' style='margin-left: "+indent_level+"em'><div class='payloadtext left'><small>"+offset+"</small>" + msg + "</div>" +
                 "<div class='payloadhex right'>" + h + "</div></div>";
 
         }
@@ -291,15 +294,15 @@ div#errormsg {
             var mn = inp.substring(i, i + 8)
             console.log("magic: " + mn)
             if (mn != '0061736D')
-                return print_error(mn, "Invalid magic number", out)
-            print_field(mn, "Magic number", out)
+                return print_error(mn, "Invalid magic number", out, i)
+            print_field(mn, "Magic number", out, i)
             return i + 8 
         }
 
         function parse_version(inp, i, out)
         {
             var ver = inp.substring(i, i + 8)
-            print_field(ver, "Version", out)
+            print_field(ver, "Version", out, i)
             return i + 8
         }
 
@@ -358,13 +361,13 @@ div#errormsg {
 
             [i, type_count] = parse_leb128(inp, i, out); if (typeof(i) == "string") return i;
 
-            print_explain(inp.substring(oldi, i), prefix + " count " + type_count, out)
+            print_explain(inp.substring(oldi, i), prefix + " count " + type_count, out, i)
 
             indent_level += 2
             while (i < inp.length && type_count--)
             {
                 var t = parseInt(inp[i] + inp[i+1], 16)
-                print_payload(inp[i] + inp[i+1], val_type(t), out)
+                print_payload(inp[i] + inp[i+1], val_type(t), out, i)
                 i+=2
             }
             indent_level -=2 
@@ -379,11 +382,11 @@ div#errormsg {
 
             if (inp[i] != '6' || inp[i+1] != '0')
             {
-                print_error(inp[i] + inp[i+1], "expecting functype", out)
+                print_error(inp[i] + inp[i+1], "expecting functype", out, i)
                 return "expecting functype but other bytes found"
             }
 
-            print_field(inp[i] + inp[i+1], "Functype" + (nam == "" ? "" : " ") +  nam, out)
+            print_field(inp[i] + inp[i+1], "Functype" + (nam == "" ? "" : " ") +  nam, out, i)
             i+=2
 
             // parse two result types
@@ -415,13 +418,13 @@ div#errormsg {
             [i, nam] = parse_name(inp, i, out);
             if (typeof(i) == "string")
             {
-                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                print_error(inp.substring(oldi, i), "expected byte vector", out, i)
                 return "expected byte vector"
             }
             
-            print_field("", "Export " + enam, out)
+            print_field("", "Export " + enam, out, i)
             indent_level += 2
-            print_payload(inp.substring(oldi, i), "Name: `" + nam + "`", out)
+            print_payload(inp.substring(oldi, i), "Name: `" + nam + "`", out, i)
           
             if (i+2 > inp.length)
                 return "eoi when expecting exportt description"
@@ -429,18 +432,18 @@ div#errormsg {
             var idd = parseInt(inp[i] + inp[i+1], 16)
             if (idd > 3 || idd < 0) 
             {
-                print_error(inp[i] + inp[i+1], "expected export desc between 0x00 ... 0x03", out)
+                print_error(inp[i] + inp[i+1], "expected export desc between 0x00 ... 0x03", out, i)
                 return "invalid export desc"
             }
     
-            print_payload(inp[i] + inp[i+1], "Type: " + idx_type(idd) , out) 
+            print_payload(inp[i] + inp[i+1], "Type: " + idx_type(idd) , out, i)
 
             i+=2
 
             var idx = 0
             old_i = i;
             [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-            print_payload(inp.substring(old_i, i), "Index: " + idx, out)
+            print_payload(inp.substring(old_i, i), "Index: " + idx, out, i)
             indent_level -= 2 
             return i
 
@@ -454,20 +457,20 @@ div#errormsg {
             [i, nam] = parse_name(inp, i, out);
             if (typeof(i) == "string")
             {
-                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                print_error(inp.substring(oldi, i), "expected byte vector", out, i)
                 return "expected byte vector"
             }
-            print_payload(inp.substring(oldi, i), "Module name: `" + nam + "`", out)
+            print_payload(inp.substring(oldi, i), "Module name: `" + nam + "`", out, i)
         
             oldi = i;
             nam = "";
             [i, nam] = parse_name(inp, i, out);
             if (typeof(i) == "string")
             {
-                print_error(inp.substring(oldi, i), "expected byte vector", out)
+                print_error(inp.substring(oldi, i), "expected byte vector", out, i)
                 return "expected byte vector"
             }
-            print_payload(inp.substring(oldi, i), "Func name: `" + nam + "`", out)
+            print_payload(inp.substring(oldi, i), "Func name: `" + nam + "`", out, i)
           
             if (i+2 > inp.length)
                 return "eoi when expecting import description"
@@ -475,11 +478,11 @@ div#errormsg {
             var idd = parseInt(inp[i] + inp[i+1], 16)
             if (idd > 3 || idd < 0) 
             {
-                print_error(inp[i] + inp[i+1], "expected import desc between 0x00 ... 0x03", out)
+                print_error(inp[i] + inp[i+1], "expected import desc between 0x00 ... 0x03", out, i)
                 return "invalid import desc"
             }
 
-            print_payload(inp.substring(i, i+2), "Import type: " + ( idd == 0x00 ? "Func" :
+            print_payload(inp.substring(i, i+2, i), "Import type: " + ( idd == 0x00 ? "Func" :
                                                                    ( idd == 0x01 ? "Table" : 
                                                                    ( idd == 0x02 ? "Mem" :
                                                                    ( idd == 0x03 ? "Global" : "Unknown" )))), out);
@@ -490,11 +493,11 @@ div#errormsg {
                 var typeidx = 0
                 old_i = i;
                 [i, typeidx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_payload(inp.substring(old_i, i), "Type index: " + typeidx, out)
+                print_payload(inp.substring(old_i, i), "Type index: " + typeidx, out, i)
                 return i
             }   
 
-            print_error("???", "not yet implemented", out); // todo implement 
+            print_error("???", "not yet implemented", out, i); // todo implement 
             return "not yet implemented"
         }
 
@@ -509,7 +512,7 @@ div#errormsg {
                 // end
                 if (opcode == 0x00)
                 {
-                    print_payload(h, "unreachable", out)
+                    print_payload(h, "unreachable", out, i)
                     i+=2
                     continue
                 }
@@ -517,7 +520,7 @@ div#errormsg {
                 // nop
                 if (opcode == 0x01)
                 {
-                    print_payload(h, "nop", out)
+                    print_payload(h, "nop", out, i)
                     i+=2
                     continue
                 }
@@ -530,7 +533,7 @@ div#errormsg {
                     if (opcode == 0x03) block_type == "loop"
                     if (opcode == 0x04) block_type == "if"
                    
-                    print_payload(h, opcode, out)
+                    print_payload(h, opcode, out, i)
                     
                     i += 2
                     if (i > inp.length)
@@ -548,7 +551,7 @@ div#errormsg {
                         ret_type =  "Type index: " + typeidx
                     }
                     if (typeidx == -1) i+=2
-                    print_payload(inp.substring(oldi, i), ret_type, out)
+                    print_payload(inp.substring(oldi, i), ret_type, out, i)
 
                     indent_level += 2
                     i = parse_instr_verbose(inp, i, out, endi)
@@ -557,7 +560,7 @@ div#errormsg {
 
                     if (i + 2 > inp.length && parseInt(inp[i] + inp[i+1], 16) == 0x50)
                     {
-                        print_payload(inp[i] + inp[i+1], "else", out)
+                        print_payload(inp[i] + inp[i+1], "else", out, i)
                         i+=2
                         indent_level += 2
                         i = parse_instr_verbose(inp, i, out, endi)
@@ -582,7 +585,7 @@ div#errormsg {
                         var idx = 0
                         var old_i = i;
                         [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                        print_payload(inp.substring(old_i, i), "to index: " + typeidx, out)
+                        print_payload(inp.substring(old_i, i), "to index: " + typeidx, out, i)
                         continue
                     }
 
@@ -590,7 +593,7 @@ div#errormsg {
                     var vec = 0
                     var old_i = i;
                     [i, vec] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                    print_payload(inp.subsring(old_i, i), "table len " + vec, out)
+                    print_payload(inp.subsring(old_i, i), "table len " + vec, out, i)
                     indent_level += 2
                     var count = 0
                     while (i < inp.length && vec-- > 0)
@@ -598,7 +601,7 @@ div#errormsg {
                         var idx = 0
                         var old_i = i;
                         [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                        print_payload(inp.substring(old_i, i), (count++)+" -> idx " + idx, out)
+                        print_payload(inp.substring(old_i, i), (count++)+" -> idx " + idx, out, i)
                     }
                     indent_level -= 2
 
@@ -609,13 +612,13 @@ div#errormsg {
                 if (opcode == 0x10 || opcode == 0x11)
                 {
                         var indirect = (opcode == 0x11)
-                        print_payload(inp[i], inp[i+1], "Call" + (indirect ? " indirect" : ""), out)
+                        print_payload(inp[i], inp[i+1], "Call" + (indirect ? " indirect" : ""), out, i)
                         i+=2
                         indent_level += 2
                         var idx = 0
                         var old_i = i;
                         [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                        print_payload(inp.substring(old_i, i),  "Function " + idx, out)
+                        print_payload(inp.substring(old_i, i),  "Function " + idx, out, i)
                         if (indirect) i+= 2
                         indent_level -= 2
                         continue
@@ -624,7 +627,7 @@ div#errormsg {
                 //Parametric Instructions
                 if (opcode == 0x1A || opcode == 0x1B)
                 {
-                    print_payload(inp[i], inp[i+1], (opcode == 0x1B ? "Select" : "Drop"), out)
+                    print_payload(inp[i], inp[i+1], (opcode == 0x1B ? "Select" : "Drop"), out, i)
                     i+=2
                     continue
                 }
@@ -638,13 +641,13 @@ div#errormsg {
                     if (opcode == 0x22) i_type = "Local tee"
                     if (opcode == 0x23) i_type = "Global get"
                     if (opcode == 0x24) i_type = "Global set"
-                    print_payload(inp[i] + inp[i+1], i_type, out)
+                    print_payload(inp[i] + inp[i+1], i_type, out, i)
                     i+=2
                     indent_level += 2
                     var idx = 0
                     var old_i = i;
                     [i, idx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                    print_payload(inp.substring(old_i, i),  "Index: " + idx, out)
+                    print_payload(inp.substring(old_i, i),  "Index: " + idx, out, i)
                     indent_level -= 2
                     continue
                 }
@@ -684,12 +687,12 @@ div#errormsg {
                     if (opcode == 0x3F) i_type = "Get memory size"
                     if (opcode == 0x40) i_type = "Grow memory"
 
-                    print_payload(inp[i] + inp[i+1], i_type, out)
+                    print_payload(inp[i] + inp[i+1], i_type, out, i)
                     i+=2
                     if (opcode == 0x3F || opcode == 0x40)
                     {
                         indent_level += 2
-                        print_payload(inp[i] + inp[i+1], "[reserved]")
+                        print_payload(inp[i] + inp[i+1], "[reserved]", i)
                         i+=2
                         indent_level -= 2
                         continue
@@ -699,18 +702,18 @@ div#errormsg {
                     var align = 0
                     var old_i = i;
                     [i, align] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                    print_payload(inp.substring(old_i, i),  "Align: " + align, out)
+                    print_payload(inp.substring(old_i, i),  "Align: " + align, out, i)
 
                     var offset = 0
                     old_i = i;
                     [i, offset] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                    print_payload(inp.substring(old_i, i),  "Offset: " + offset, out)
+                    print_payload(inp.substring(old_i, i),  "Offset: " + offset, out, i)
                     indent_level -=2
                     continue
 
                 }
 
-                print_payload(inp[i] + inp[i+1], "not yet implemented", out)
+                print_payload(inp[i] + inp[i+1], "not yet implemented", out, i)
                 i+=2
 
             }
@@ -727,8 +730,8 @@ div#errormsg {
                 {
                     var instr = inp.substring(starti, i)
        //             if (instr != "")
-       //                 print_payload(instr, prefix + "instr", out)
-       //             print_payload(inp[i] + inp[i+1], "[End]", out)
+       //                 print_payload(instr, prefix + "instr", out, i)
+       //             print_payload(inp[i] + inp[i+1], "[End]", out, i)
                     parse_instr_verbose(inp, starti, out, i)
                     return i+2
                 }
@@ -738,11 +741,11 @@ div#errormsg {
 
         function parse_data(inp, i, out, enam)
         {
-            print_field("", "Datasec " + enam, out)
+            print_field("", "Datasec " + enam, out, i)
             var memidx = 0
             var old_i = i;
             [i, memidx] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-            print_explain(inp.substring(old_i, i),  "memory index: " + memidx, out)
+            print_explain(inp.substring(old_i, i),  "memory index: " + memidx, out, i)
 
             indent_level += 2
             i = parse_instr(inp, i, out, "Offset = ")
@@ -751,17 +754,17 @@ div#errormsg {
 
             indent_level -= 2
 
-            print_field("", "Initalize", out)
+            print_field("", "Initalize", out, i)
             var len = 0
             var old_i = i;
             [i, len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-            print_explain(inp.substring(old_i, i),  "len " + len, out)
+            print_explain(inp.substring(old_i, i),  "len " + len, out, i)
             indent_level += 2
             
             if (i + len*2 > inp.length)
                 return "eoi while parsing datasec"
 
-            print_payload(inp.substring(i, i + len*2), "data", out)
+            print_payload(inp.substring(i, i + len*2), "data", out, i)
 
             indent_level -= 2
             return i + len*2
@@ -770,11 +773,11 @@ div#errormsg {
         function parse_function(inp, i, out, enam)
         {
 
-                print_field("", "Function " + enam, out)
+                print_field("", "Function " + enam, out, i)
                 var len = 0
                 var old_i = i;
                 [i, len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_explain(inp.substring(old_i, i),  "byte len: " + len, out)
+                print_explain(inp.substring(old_i, i),  "byte len: " + len, out, i)
             
                 var endi = i + len*2;
 
@@ -782,33 +785,33 @@ div#errormsg {
                 var local_len = 0
                 old_i = i;
                 [i, local_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_explain(inp.substring(old_i, i), "Locals: " + local_len, out)
+                print_explain(inp.substring(old_i, i), "Locals: " + local_len, out, i)
 
                 indent_level += 2
                 var local_count = 0
                 while (i < inp.length && local_len-- > 0)
                 {
 
-                    print_field("", "Local " + (local_count++), out)
+                    print_field("", "Local " + (local_count++), out, i)
                     indent_level += 2
                     
                     var array_len = 0
                     old_i = i;
                     [i, array_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                    print_payload(inp.substring(old_i, i), "Element count: " +  array_len, out)
+                    print_payload(inp.substring(old_i, i), "Element count: " +  array_len, out, i)
 
                     if (i + 2 > inp.length)
                     {
-                        print_error("?", "eoi while parsing local type", out)
+                        print_error("?", "eoi while parsing local type", out, i)
                         return "eoi while parsing local type"
                     }
                     var local_type = parseInt(inp[i] + inp[i+1], 16)
                     if (local_type < 0x7C || local_type > 0x7F)
                     {
-                        print_error(inp[i] + inp[i+1], "invalid local type, expecting 0x7C... 0x7F", out)
+                        print_error(inp[i] + inp[i+1], "invalid local type, expecting 0x7C... 0x7F", out, i)
                         return "invalid local type, expecting 0x7C... 0x7F"
                     }
-                    print_payload(inp[i] + inp[i+1], "Local Type: " + val_type(local_type), out)
+                    print_payload(inp[i] + inp[i+1], "Local Type: " + val_type(local_type), out, i)
                     i+=2
 
                     indent_level -= 2
@@ -816,7 +819,7 @@ div#errormsg {
 
 
                 // locals parsed now do expr
-                print_field("", "Function instructions", out)
+                print_field("", "Function instructions", out, i)
                 i = parse_instr(inp, i, out, "", endi)
                 indent_level -= 2
                 return i
@@ -831,20 +834,20 @@ div#errormsg {
             var gtype = parseInt(inp[i] + inp[i+1], 16)
             if (gtype < 0x7C || gtype > 0x7F)
             {
-                print_error(inp[i] + inp[i+1], "expecting type 0x7C - 0x7F", out)
+                print_error(inp[i] + inp[i+1], "expecting type 0x7C - 0x7F", out, i)
                 return "invalid type"
             }
 
-            print_field(inp[i] + inp[i+1], "Global "+nam, out)
+            print_field(inp[i] + inp[i+1], "Global "+nam, out, i)
             i+=2 
 
             var mut = parseInt(inp[i] + inp[i+1], 16)
             if (mut < 0x00 || mut > 0x01)
             {
-                print_error(inp[i] + inp[i+1], "expecting mutation type 0x01 or 0x00", out)
+                print_error(inp[i] + inp[i+1], "expecting mutation type 0x01 or 0x00", out, i)
                 return "invalid mutation type"
             }
-            print_explain(inp[i] + inp[i+1], ( mut == 0 ? "const" : "var" ), out)
+            print_explain(inp[i] + inp[i+1], ( mut == 0 ? "const" : "var" ), out, i)
             i+=2 
             indent_level += 2
             i = parse_instr(inp, i, out, "Expr = ")
@@ -861,27 +864,27 @@ div#errormsg {
             {
                 // section loop
                 var section_id = parseInt(inp[i] + inp[i+1], 16) 
-                print_field(inp[i] + inp[i+1], "Section " + section_id + " - " + section_name(section_id), out)
+                print_field(inp[i] + inp[i+1], "Section " + section_id + " - " + section_name(section_id), out, i)
                 i += 2
 
                 var section_len = 0;
                 var old_i = i;
                 [i, section_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_explain(inp.substring(old_i, i), "section byte length " + section_len, out)
+                print_explain(inp.substring(old_i, i), "section byte length " + section_len, out, i)
                 
                 if (section_id == 0)
                 {
                     // custom section
                     if (i + section_len*2 > inp.length)
                     {
-                        print_error("?", "eoi while trying to read custom section", out)
+                        print_error("?", "eoi while trying to read custom section", out, i)
                         break
                     }
-                    print_payload(inp.substring(i, i + section_len*2), "Custom section (usless) data", out)
+                    print_payload(inp.substring(i, i + section_len*2), "Custom section (usless) data", out, i)
                     var ascii = ""
                     for (var j = i; j < i + section_len*2; j+=2)
                         ascii += String.fromCharCode(parseInt(inp[j] + inp[j+1], 16))
-                    print_ascii(  ascii, "(ascii)", out)
+                    print_ascii(  ascii, "(ascii)", out, i)
                     i += section_len*2
                     continue
                 }
@@ -890,7 +893,7 @@ div#errormsg {
                 var vector_len = 0
                 old_i = i;
                 [i, vector_len] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                print_explain(inp.substring(old_i, i), "vector of " + vector_len + " entries", out)
+                print_explain(inp.substring(old_i, i), "vector of " + vector_len + " entries", out, i)
                 
 
                 if (section_id == 1)
@@ -902,7 +905,7 @@ div#errormsg {
                         i = parse_functype(inp, i, out, ""+(func_count++))
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out);
+                            print_error("?", i, out, i);
                             break
                         }
 
@@ -922,7 +925,7 @@ div#errormsg {
                         i = parse_import(inp, i, out, ""+(import_count++))
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out);
+                            print_error("?", i, out, i);
                             break
                         }
 
@@ -944,11 +947,11 @@ div#errormsg {
                         [i, idx] = parse_leb128(inp, i, out);
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out)
+                            print_error("?", i, out, i)
                             break
                         }
 
-                        print_payload(inp.substring(old_i, i), "Function " + functions++ + ": type index " + idx, out)
+                        print_payload(inp.substring(old_i, i), "Function " + functions++ + ": type index " + idx, out, i)
 
                     }
                     indent_level -= 2
@@ -964,7 +967,7 @@ div#errormsg {
                     {
                         if (i+6 > inp.length)
                         {
-                            print_error("?", "eoi while expecting " + _type + " type", out)
+                            print_error("?", "eoi while expecting " + _type + " type", out, i)
                             break
                         }
 
@@ -972,11 +975,11 @@ div#errormsg {
                         {
                             if (inp[i] != '7' || inp[i+1] != '0')
                             {
-                                print_error(inp[i] + inp[i+1], "expected 0x70 for table type", out)
+                                print_error(inp[i] + inp[i+1], "expected 0x70 for table type", out, i)
                                 break
                             }
 
-                            print_field(inp[i] + inp[i+1], "Table " + (tables++), out)
+                            print_field(inp[i] + inp[i+1], "Table " + (tables++), out, i)
 
                             i += 2
                         }
@@ -985,11 +988,11 @@ div#errormsg {
                         var limit_type = parseInt(inp[i] + inp[i+1], 16)
                         if (limit_type < 0 || limit_type > 1)
                         {
-                            print_error(inp[i] + inp[i+1], "expecting 0x01 or 0x02 specifying limit type", out)
+                            print_error(inp[i] + inp[i+1], "expecting 0x01 or 0x02 specifying limit type", out, i)
                             break
                         }
 
-                        print_field(inp[i] + inp[i+1], "Limit type", out)
+                        print_field(inp[i] + inp[i+1], "Limit type", out, i)
 
                         i += 2
 
@@ -999,7 +1002,7 @@ div#errormsg {
                         var limit_min = 0
                         old_i = i;
                         [i, limit_min] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                        print_payload(inp.substring(old_i, i), "min: " + limit_min, out)
+                        print_payload(inp.substring(old_i, i), "min: " + limit_min, out, i)
                
                         // parse limit 2
                         if (limit_type == 1)
@@ -1007,7 +1010,7 @@ div#errormsg {
                             var limit_max = 0
                             old_i = i;
                             [i, limit_max] = parse_leb128(inp, i, out);  if (typeof(i) == "string") return i;
-                            print_payload(inp.substring(old_i, i), "max: " + limit_max, out)
+                            print_payload(inp.substring(old_i, i), "max: " + limit_max, out, i)
                         }
                         indent_level -=2 
                     }
@@ -1027,7 +1030,7 @@ div#errormsg {
 
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out)
+                            print_error("?", i, out, i)
                             break
                         }
 
@@ -1046,7 +1049,7 @@ div#errormsg {
                         i = parse_export(inp, i, out, ""+(export_count++))
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out);
+                            print_error("?", i, out, i);
                             break
                         }
 
@@ -1065,7 +1068,7 @@ div#errormsg {
                         i = parse_function(inp, i, out, ""+(function_count++))
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out);
+                            print_error("?", i, out, i);
                             break
                         }
 
@@ -1084,7 +1087,7 @@ div#errormsg {
                         i = parse_data(inp, i, out, ""+(data_count++))
                         if (typeof(i) == "string")
                         {
-                            print_error("?", i, out);
+                            print_error("?", i, out, i);
                             break
                         }
 
@@ -1100,7 +1103,7 @@ div#errormsg {
 
             var unparsed = inp.substring(i, inp.length)
             if (unparsed != "")
-              print_payload(inp.substring(i, inp.length), "remaining unparsed bytes", out)
+              print_payload(inp.substring(i, inp.length), "remaining unparsed bytes", out, i)
         }
 
         function run() {
