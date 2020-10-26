@@ -164,33 +164,33 @@ small {
         }
 
         function print_error(m, h, out, offset){
-            out.innerHTML += "<br/><div class='invalid left'><small>"+offset+"</small>"+h+"</div><div class='invalid right'>" + 
+            out.innerHTML += "<br/><div class='invalid left'><small>"+(offset/2)+"</small>"+h+"</div><div class='invalid right'>" + 
                 m + "</div>"; 
             return m
         }
 
         function print_field(h, s, out, offset){
-            out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><small>"+offset+"</small><b>" + s +
+            out.innerHTML += "<br/><div style='margin-left: "+indent_level+"em' class='field'><div class='fieldtext left'><small>"+(offset/2)+"</small><b>" + s +
                 "</b></div><div class='fieldhex right"+(h=="" ? "empty" : "")+"'>" + h + "</div></div>"
         }
         
         function print_ascii(h, msg, out, offset)
         {
             out.innerHTML += "<br/>" + 
-                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+offset+"</small>" + msg + "</div>" +
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+(offset/2)+"</small>" + msg + "</div>" +
                 "<div class='explainhex rightempty ascii"+(h==""?'2':'')+"'>" + h + "</div></div>";
         }
 
         function print_explain(h, msg, out, offset){
             out.innerHTML += 
-                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+offset+"</small>" + msg + "</div>" +
+                "<div class='explain' style='margin-left: "+indent_level+"em'><div class='explaintext left'><small>"+(offset/2)+"</small>" + msg + "</div>" +
                 "<div class='explainhex right"+(h==""?'2':'')+"'>" + h + "</div></div>";
         }
 
         function print_payload(h, msg, out, offset){
 
             out.innerHTML +=  "<br/>" + 
-                "<div class='payload' style='margin-left: "+indent_level+"em'><div class='payloadtext left'><small>"+offset+"</small>" + msg + "</div>" +
+                "<div class='payload' style='margin-left: "+indent_level+"em'><div class='payloadtext left'><small>"+(offset/2)+"</small>" + msg + "</div>" +
                 "<div class='payloadhex right'>" + h + "</div></div>";
 
         }
